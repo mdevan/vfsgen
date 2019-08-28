@@ -26,6 +26,10 @@ type Options struct {
 	// VariableComment is the comment of the http.FileSystem variable in the generated code.
 	// If left empty, it defaults to "{{.VariableName}} statically implements the virtual filesystem provided to vfsgen.".
 	VariableComment string
+
+	// Prefix is the string used to prefix private variable and type names
+	// inside the generated code. If left empty, it defaults to "vfsgen".
+	Prefix string
 }
 
 // fillMissing sets default values for mandatory options that are left empty.
@@ -41,5 +45,8 @@ func (opt *Options) fillMissing() {
 	}
 	if opt.VariableComment == "" {
 		opt.VariableComment = fmt.Sprintf("%s statically implements the virtual filesystem provided to vfsgen.", opt.VariableName)
+	}
+	if opt.Prefix == "" {
+		opt.Prefix = "vfsgen"
 	}
 }

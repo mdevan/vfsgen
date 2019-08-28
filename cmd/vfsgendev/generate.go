@@ -20,7 +20,7 @@ var generateTemplate = template.Must(template.New("").Funcs(template.FuncMap{
 import (
 	"log"
 
-	"github.com/shurcooL/vfsgen"
+	"github.com/mdevan/vfsgen"
 
 	sourcepkg {{.ImportPath | quote}}
 )

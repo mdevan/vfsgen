@@ -23,6 +23,9 @@ import (
 func Generate(input http.FileSystem, opt Options) error {
 	opt.fillMissing()
 
+	// add the prefix to the template
+	t = t.Funcs(template.FuncMap{"prefix": func() string { return opt.Prefix }})
+
 	// Use an in-memory buffer to generate the entire output.
 	buf := new(bytes.Buffer)
 
@@ -206,7 +209,8 @@ func writeFileInfo(w io.Writer, file *fileInfo, r io.Reader) error {
 }
 
 var t = template.Must(template.New("").Funcs(template.FuncMap{
-	"quote": strconv.Quote,
+	"prefix": func() string { return "vfsgen" }, // overridden later
+	"quote":  strconv.Quote,
 	"comment": func(s string) (string, error) {
 		var buf bytes.Buffer
 		cw := &commentWriter{W: &buf}
@@ -237,12 +241,12 @@ import (
 
 {{comment .VariableComment}}
 var {{.VariableName}} = func() http.FileSystem {
-	fs := vfsgen۰FS{
+	fs := {{prefix}}۰FS{
 {{end}}
 
 
 
-{{define "CompressedFileInfo-Before"}}		{{quote .Path}}: &vfsgen۰CompressedFileInfo{
+{{define "CompressedFileInfo-Before"}}		{{quote .Path}}: &{{prefix}}۰CompressedFileInfo{
 			name:             {{quote .Name}},
 			modTime:          {{template "Time" .ModTime}},
 			uncompressedSize: {{.UncompressedSize}},
@@ -253,7 +257,7 @@ var {{.VariableName}} = func() http.FileSystem {
 
 
 
-{{define "FileInfo-Before"}}		{{quote .Path}}: &vfsgen۰FileInfo{
+{{define "FileInfo-Before"}}		{{quote .Path}}: &{{prefix}}۰FileInfo{
 			name:    {{quote .Name}},
 			modTime: {{template "Time" .ModTime}},
 			content: []byte("{{end}}{{define "FileInfo-After"}}"),
@@ -262,7 +266,7 @@ var {{.VariableName}} = func() http.FileSystem {
 
 
 
-{{define "DirInfo"}}		{{quote .Path}}: &vfsgen۰DirInfo{
+{{define "DirInfo"}}		{{quote .Path}}: &{{prefix}}۰DirInfo{
 			name:    {{quote .Name}},
 			modTime: {{template "Time" .ModTime}},
 		},
@@ -271,7 +275,7 @@ var {{.VariableName}} = func() http.FileSystem {
 
 
 {{define "DirEntries"}}	}
-{{range .}}{{if .Entries}}	fs[{{quote .Path}}].(*vfsgen۰DirInfo).entries = []os.FileInfo{{"{"}}{{range .Entries}}
+{{range .}}{{if .Entries}}	fs[{{quote .Path}}].(*{{prefix}}۰DirInfo).entries = []os.FileInfo{{"{"}}{{range .Entries}}
 		fs[{{quote .}}].(os.FileInfo),{{end}}
 	}
 {{end}}{{end}}
@@ -282,9 +286,9 @@ var {{.VariableName}} = func() http.FileSystem {
 
 
 {{define "Trailer"}}
-type vfsgen۰FS map[string]interface{}
+type {{prefix}}۰FS map[string]interface{}
 
-func (fs vfsgen۰FS) Open(path string) (http.File, error) {
+func (fs {{prefix}}۰FS) Open(path string) (http.File, error) {
 	path = pathpkg.Clean("/" + path)
 	f, ok := fs[path]
 	if !ok {
@@ -292,24 +296,24 @@ func (fs vfsgen۰FS) Open(path string) (http.File, error) {
 	}
 
 	switch f := f.(type) {{"{"}}{{if .HasCompressedFile}}
-	case *vfsgen۰CompressedFileInfo:
+	case *{{prefix}}۰CompressedFileInfo:
 		gr, err := gzip.NewReader(bytes.NewReader(f.compressedContent))
 		if err != nil {
 			// This should never happen because we generate the gzip bytes such that they are always valid.
 			panic("unexpected error reading own gzip compressed bytes: " + err.Error())
 		}
-		return &vfsgen۰CompressedFile{
-			vfsgen۰CompressedFileInfo: f,
+		return &{{prefix}}۰CompressedFile{
+			{{prefix}}۰CompressedFileInfo: f,
 			gr:                        gr,
 		}, nil{{end}}{{if .HasFile}}
-	case *vfsgen۰FileInfo:
-		return &vfsgen۰File{
-			vfsgen۰FileInfo: f,
+	case *{{prefix}}۰FileInfo:
+		return &{{prefix}}۰File{
+			{{prefix}}۰FileInfo: f,
 			Reader:          bytes.NewReader(f.content),
 		}, nil{{end}}
-	case *vfsgen۰DirInfo:
-		return &vfsgen۰Dir{
-			vfsgen۰DirInfo: f,
+	case *{{prefix}}۰DirInfo:
+		return &{{prefix}}۰Dir{
+			{{prefix}}۰DirInfo: f,
 		}, nil
 	default:
 		// This should never happen because we generate only the above types.
@@ -317,39 +321,39 @@ func (fs vfsgen۰FS) Open(path string) (http.File, error) {
 	}
 }
 {{if .HasCompressedFile}}
-// vfsgen۰CompressedFileInfo is a static definition of a gzip compressed file.
-type vfsgen۰CompressedFileInfo struct {
+// {{prefix}}۰CompressedFileInfo is a static definition of a gzip compressed file.
+type {{prefix}}۰CompressedFileInfo struct {
 	name              string
 	modTime           time.Time
 	compressedContent []byte
 	uncompressedSize  int64
 }
 
-func (f *vfsgen۰CompressedFileInfo) Readdir(count int) ([]os.FileInfo, error) {
+func (f *{{prefix}}۰CompressedFileInfo) Readdir(count int) ([]os.FileInfo, error) {
 	return nil, fmt.Errorf("cannot Readdir from file %s", f.name)
 }
-func (f *vfsgen۰CompressedFileInfo) Stat() (os.FileInfo, error) { return f, nil }
+func (f *{{prefix}}۰CompressedFileInfo) Stat() (os.FileInfo, error) { return f, nil }
 
-func (f *vfsgen۰CompressedFileInfo) GzipBytes() []byte {
+func (f *{{prefix}}۰CompressedFileInfo) GzipBytes() []byte {
 	return f.compressedContent
 }
 
-func (f *vfsgen۰CompressedFileInfo) Name() string       { return f.name }
-func (f *vfsgen۰CompressedFileInfo) Size() int64        { return f.uncompressedSize }
-func (f *vfsgen۰CompressedFileInfo) Mode() os.FileMode  { return 0444 }
-func (f *vfsgen۰CompressedFileInfo) ModTime() time.Time { return f.modTime }
-func (f *vfsgen۰CompressedFileInfo) IsDir() bool        { return false }
-func (f *vfsgen۰CompressedFileInfo) Sys() interface{}   { return nil }
+func (f *{{prefix}}۰CompressedFileInfo) Name() string       { return f.name }
+func (f *{{prefix}}۰CompressedFileInfo) Size() int64        { return f.uncompressedSize }
+func (f *{{prefix}}۰CompressedFileInfo) Mode() os.FileMode  { return 0444 }
+func (f *{{prefix}}۰CompressedFileInfo) ModTime() time.Time { return f.modTime }
+func (f *{{prefix}}۰CompressedFileInfo) IsDir() bool        { return false }
+func (f *{{prefix}}۰CompressedFileInfo) Sys() interface{}   { return nil }
 
-// vfsgen۰CompressedFile is an opened compressedFile instance.
-type vfsgen۰CompressedFile struct {
-	*vfsgen۰CompressedFileInfo
+// {{prefix}}۰CompressedFile is an opened compressedFile instance.
+type {{prefix}}۰CompressedFile struct {
+	*{{prefix}}۰CompressedFileInfo
 	gr      *gzip.Reader
 	grPos   int64 // Actual gr uncompressed position.
 	seekPos int64 // Seek uncompressed position.
 }
 
-func (f *vfsgen۰CompressedFile) Read(p []byte) (n int, err error) {
+func (f *{{prefix}}۰CompressedFile) Read(p []byte) (n int, err error) {
 	if f.grPos > f.seekPos {
 		// Rewind to beginning.
 		err = f.gr.Reset(bytes.NewReader(f.compressedContent))
@@ -371,7 +375,7 @@ func (f *vfsgen۰CompressedFile) Read(p []byte) (n int, err error) {
 	f.seekPos = f.grPos
 	return n, err
 }
-func (f *vfsgen۰CompressedFile) Seek(offset int64, whence int) (int64, error) {
+func (f *{{prefix}}۰CompressedFile) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		f.seekPos = 0 + offset
@@ -384,7 +388,7 @@ func (f *vfsgen۰CompressedFile) Seek(offset int64, whence int) (int64, error) {
 	}
 	return f.seekPos, nil
 }
-func (f *vfsgen۰CompressedFile) Close() error {
+func (f *{{prefix}}۰CompressedFile) Close() error {
 	return f.gr.Close()
 }
 {{else}}
@@ -392,67 +396,67 @@ func (f *vfsgen۰CompressedFile) Close() error {
 var _ = gzip.Reader{}
 var _ = ioutil.Discard
 {{end}}{{if .HasFile}}
-// vfsgen۰FileInfo is a static definition of an uncompressed file (because it's not worth gzip compressing).
-type vfsgen۰FileInfo struct {
+// {{prefix}}۰FileInfo is a static definition of an uncompressed file (because it's not worth gzip compressing).
+type {{prefix}}۰FileInfo struct {
 	name    string
 	modTime time.Time
 	content []byte
 }
 
-func (f *vfsgen۰FileInfo) Readdir(count int) ([]os.FileInfo, error) {
+func (f *{{prefix}}۰FileInfo) Readdir(count int) ([]os.FileInfo, error) {
 	return nil, fmt.Errorf("cannot Readdir from file %s", f.name)
 }
-func (f *vfsgen۰FileInfo) Stat() (os.FileInfo, error) { return f, nil }
+func (f *{{prefix}}۰FileInfo) Stat() (os.FileInfo, error) { return f, nil }
 
-func (f *vfsgen۰FileInfo) NotWorthGzipCompressing() {}
+func (f *{{prefix}}۰FileInfo) NotWorthGzipCompressing() {}
 
-func (f *vfsgen۰FileInfo) Name() string       { return f.name }
-func (f *vfsgen۰FileInfo) Size() int64        { return int64(len(f.content)) }
-func (f *vfsgen۰FileInfo) Mode() os.FileMode  { return 0444 }
-func (f *vfsgen۰FileInfo) ModTime() time.Time { return f.modTime }
-func (f *vfsgen۰FileInfo) IsDir() bool        { return false }
-func (f *vfsgen۰FileInfo) Sys() interface{}   { return nil }
+func (f *{{prefix}}۰FileInfo) Name() string       { return f.name }
+func (f *{{prefix}}۰FileInfo) Size() int64        { return int64(len(f.content)) }
+func (f *{{prefix}}۰FileInfo) Mode() os.FileMode  { return 0444 }
+func (f *{{prefix}}۰FileInfo) ModTime() time.Time { return f.modTime }
+func (f *{{prefix}}۰FileInfo) IsDir() bool        { return false }
+func (f *{{prefix}}۰FileInfo) Sys() interface{}   { return nil }
 
-// vfsgen۰File is an opened file instance.
-type vfsgen۰File struct {
-	*vfsgen۰FileInfo
+// {{prefix}}۰File is an opened file instance.
+type {{prefix}}۰File struct {
+	*{{prefix}}۰FileInfo
 	*bytes.Reader
 }
 
-func (f *vfsgen۰File) Close() error {
+func (f *{{prefix}}۰File) Close() error {
 	return nil
 }
 {{else if not .HasCompressedFile}}
 // We already imported "bytes", but ended up not using it. Avoid unused import error.
 var _ = bytes.Reader{}
 {{end}}
-// vfsgen۰DirInfo is a static definition of a directory.
-type vfsgen۰DirInfo struct {
+// {{prefix}}۰DirInfo is a static definition of a directory.
+type {{prefix}}۰DirInfo struct {
 	name    string
 	modTime time.Time
 	entries []os.FileInfo
 }
 
-func (d *vfsgen۰DirInfo) Read([]byte) (int, error) {
+func (d *{{prefix}}۰DirInfo) Read([]byte) (int, error) {
 	return 0, fmt.Errorf("cannot Read from directory %s", d.name)
 }
-func (d *vfsgen۰DirInfo) Close() error               { return nil }
-func (d *vfsgen۰DirInfo) Stat() (os.FileInfo, error) { return d, nil }
+func (d *{{prefix}}۰DirInfo) Close() error               { return nil }
+func (d *{{prefix}}۰DirInfo) Stat() (os.FileInfo, error) { return d, nil }
 
-func (d *vfsgen۰DirInfo) Name() string       { return d.name }
-func (d *vfsgen۰DirInfo) Size() int64        { return 0 }
-func (d *vfsgen۰DirInfo) Mode() os.FileMode  { return 0755 | os.ModeDir }
-func (d *vfsgen۰DirInfo) ModTime() time.Time { return d.modTime }
-func (d *vfsgen۰DirInfo) IsDir() bool        { return true }
-func (d *vfsgen۰DirInfo) Sys() interface{}   { return nil }
+func (d *{{prefix}}۰DirInfo) Name() string       { return d.name }
+func (d *{{prefix}}۰DirInfo) Size() int64        { return 0 }
+func (d *{{prefix}}۰DirInfo) Mode() os.FileMode  { return 0755 | os.ModeDir }
+func (d *{{prefix}}۰DirInfo) ModTime() time.Time { return d.modTime }
+func (d *{{prefix}}۰DirInfo) IsDir() bool        { return true }
+func (d *{{prefix}}۰DirInfo) Sys() interface{}   { return nil }
 
-// vfsgen۰Dir is an opened dir instance.
-type vfsgen۰Dir struct {
-	*vfsgen۰DirInfo
+// {{prefix}}۰Dir is an opened dir instance.
+type {{prefix}}۰Dir struct {
+	*{{prefix}}۰DirInfo
 	pos int // Position within entries for Seek and Readdir.
 }
 
-func (d *vfsgen۰Dir) Seek(offset int64, whence int) (int64, error) {
+func (d *{{prefix}}۰Dir) Seek(offset int64, whence int) (int64, error) {
 	if offset == 0 && whence == io.SeekStart {
 		d.pos = 0
 		return 0, nil
@@ -460,7 +464,7 @@ func (d *vfsgen۰Dir) Seek(offset int64, whence int) (int64, error) {
 	return 0, fmt.Errorf("unsupported Seek in directory %s", d.name)
 }
 
-func (d *vfsgen۰Dir) Readdir(count int) ([]os.FileInfo, error) {
+func (d *{{prefix}}۰Dir) Readdir(count int) ([]os.FileInfo, error) {
 	if d.pos >= len(d.entries) && count > 0 {
 		return nil, io.EOF
 	}
